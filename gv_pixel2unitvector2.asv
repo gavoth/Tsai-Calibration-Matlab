@@ -1,0 +1,53 @@
+function u = gv_imgplane2unitvector(cal, pixin)
+
+% function to find unit vectors pointing in the direction corresponding to
+% 2d image plane coordinates. 
+%Similar to gv_pixel2unitvector but accepts a calibration matrix rather
+%than a structure, and accepts undistorted image plane coordinates rather than 
+% pixels.  These differences are needed to use dyanmic calibration.
+%
+% inputs:
+%    cal  -- calibrated camera parameters (structure with .T, .Tinv, .R etc
+%   pixin   -- array(N by 2) containing pixel coordinates
+
+% turn a pixel into a unit vector.  The position of a particle in 3D space
+% is along the ray given by the point cal.Tinv + lambda*(unit vector) where
+% lambda is any real number.
+
+%create arrays 
+L=length(pixin(:,1));
+pos = zeros(L,3);
+u=zeros(L,3);
+
+%First convert pixel number into position on the image plane
+
+pos(:,1:2)=pos(:,1:2) .* (cal.T(3) / cal.f_eff);
+pos(:,3)=cal.T(3);
+
+%now include distortion.  k1 seems to be defined using the radial distance
+%after distortion
+%rather than using the undistorted radius (because calibProj_Tsai iterates) so we
+%don't iterate going this way.  I still have some questions about this
+%since http://homepages.inf.ed.ac.uk/rbf/CVonline/LOCAL_COPIES/DIAS1/
+%puts the (1+k1r_d^2) term as multiplying the distorted position rather than dividing as calibProjTsai
+%does.  It is all conventions in the end though--just need to be consistent.
+
+radius2 = pos(:,1)^2 + pos(:,2)^2;
+pos(:,1:2) = pos(:,1:2)/(1+cal.k1*radius2)
+
+%we also need to map the pinhole which is a common point on the ray for any
+%pixel.  This is the same calculation as for pixin=[0 0], but the initial z
+%coordinate is zero rather than cal.T(3)
+ 
+zpoint = [0, 0, 0]; 
+zpoint = (zpoint - (cal.T)') * (cal.Rinv)';
+
+for i=1:L
+    pos(i,:)=(pos(i,:) - (cal.T)') * (cal.Rinv)'; % I found this by reversing the steps in calibProj_Tsai
+    u(i,:)=(pos(i,:)-zpoint)/norm(pos(i,:)-zpoint); %here we subtract zpoint and normalize to a unit vector
+end
+
+
+
+
+

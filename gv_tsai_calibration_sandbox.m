@@ -1,0 +1,101 @@
+% This script is for exploring the Tsai calibration.  You can either read
+% in calibration mask data and calibrate (using calib_Tsai) or create camera calibration structures
+% artificially (using gv_makecalib) by giving the angles and coordinates that define the camera
+% positions.  It is currently set up for 3 cameras.  You then choose a point in 3D space (realpoint), map it to pixel coordinates for
+% each camera (using calibProj_Tsai), and then find the point of closest approach of the rays
+% corresponding to each pixel.  (This uses a function gv_pixel2unitvector that calculates the unit vector
+% pointing along a ray given a calibration and pixel coordinates).  
+
+%This is intended to be a sandbox for learning the calibration so various
+%things are commented out. 
+
+%The functions you need are:
+%  calib_Tsai 
+%  calibProj_Tsai
+%  myload
+%  gv_pixel2unitvector
+
+%Written by Greg Voth, March 2008
+
+clear all;
+ncams=3;
+
+% *********************************************
+%section for using calibration mask data
+%  calibimgsize=[256 256];
+% filepath='C:\Documents and Settings\gvoth\My Documents\data\cornell\calib\jan16\calibpoints\';
+% 
+% % known parameter of the Phantom cameras
+% camParaknown.Npixh = 256;
+% camParaknown.Npixw = 256;
+% camParaknown.hpix = 0.022;	% pixel size (mm)
+% camParaknown.wpix = 0.022;	% pixel size (mm)
+% 
+% for icam = 1:ncams
+% 	x = myload(strcat(filepath,'calibpointspos.cam', num2str(icam-1), '.dat'), '#');
+% 	[camParaCalib(icam) err Xout] = calib_Tsai(x(:,1:2), x(:,3:5), camParaknown, calibimgsize);
+% end
+
+%This loop removes distortion if you want to work without it
+%for icam=1:ncams
+%    camParaCalib(icam).k1=0;
+%    camParaCalib(icam).k1star=0;
+%end
+
+%***************************************
+%Section for making calibration structures from known camera positions
+
+% These three have cameras in the
+%horizontal plane and separated by 45 degrees from each other.
+%The first set have cameras with origin at the center of the image
+camParaCalib(1) = gv_makecalib(+pi/4, -pi/2, -pi/2, 0, 0, 0);
+camParaCalib(2) = gv_makecalib(0, -pi/2, -pi/2, 0, 0, 0);
+camParaCalib(3) = gv_makecalib(-pi/4, -pi/2, -pi/2, 0, 0, 0);
+
+%or use these which have the origins shifted from the center
+%camParaCalib(1) = gv_makecalib(+pi/4, -pi/2, -pi/2, -68, -25, 45);
+%camParaCalib(2) = gv_makecalib(0, -pi/2, -pi/2, 15, -45, 1);
+%camParaCalib(3) = gv_makecalib(-pi/4, -pi/2, -pi/2, 20, 38, -60);
+
+%****************************************
+
+%define the 3D point.  First row is cam1, second row is cam2, etc.  You can either 
+% set the 3D point to be the same point for each camera or use different points on the different 
+% cameras to see the error in the ray intersection.  
+%realpoint=[0 0 0; 0 0 0; 0 0 0];
+realpoint=[0 0 1; 0 0 0; 0 0 -1];
+%realpoint=[1 -3 2;1 -3 2 ; 1 -3 2];
+
+% calculate the distance between camera axes
+M = zeros(3,3);
+pM = zeros(3,ncams);
+u = zeros(3, ncams);
+for icam = 1:ncams
+    % project 2D pixel coordinates into 3D space
+    cam2d=calibProj_Tsai(camParaCalib(icam), (realpoint(icam,:)));
+    %find a unit vector along the ray defined by the calibration and pixel
+    %coordinates
+    u(:,icam) = gv_pixel2unitvector(camParaCalib(icam), cam2d);
+    % fill matrices needed to find position of closest approach of the rays
+    uM = eye(3) - u(:,icam) * (u(:,icam))';
+    pM(:,icam) = uM * camParaCalib(icam).Tinv;
+    M = M + uM;
+end
+% find the position that minimizes the distance to all rays
+p = M \ sum(pM,2);   % Makes a column vector by summing rows of pM, then does inv(M)*sum(pM,2)
+p % print the 3D point coordinates
+
+%finally calculate the distance between p and each ray
+h = zeros(1, ncams);
+for icam = 1:ncams
+    temp = p - ((p') * u(:,icam)) * u(:,icam) - pM(:,icam);
+    h(icam) = sqrt(temp' *temp);
+end
+%find the root mean square distance
+hbar = sqrt(mean(h.*h));
+
+h % print the distance to each ray
+hbar %print the rms distance
+
+
+

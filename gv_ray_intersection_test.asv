@@ -1,0 +1,58 @@
+
+ncams=3;
+calibimgsize=[256 256];
+filepath='C:\Documents and Settings\gvoth\My Documents\data\cornell\calib\jan16\calibpoints\';
+
+% known parameter of the Phantom cameras
+camParaknown.Npixh = 256;
+camParaknown.Npixw = 256;
+camParaknown.hpix = 0.022;	% pixel size (mm)
+camParaknown.wpix = 0.022;	% pixel size (mm)
+
+for icam = 1:ncams
+	x = myload(strcat(filepath,'calibpointspos.cam', num2str(icam-1), '.dat'), '#');
+	[camParaCalib(icam) err Xout] = calib_Tsai(x(:,1:2), x(:,3:5), camParaknown, calibimgsize);
+end
+
+realpoint=[0 0 0; 0 0 0; 0.1 0 -0.1];
+
+% calculate the distance between camera axes
+M = zeros(3,3);
+pM = zeros(3,ncams);
+u = zeros(3, ncams);
+for icam = 1:ncams
+    % a unit vector pointing along camera axes
+    cam2d=calibProj_Tsai(camParaCalib(icam), (realpoint(:,icam))');
+    %cam2d
+    u(:,icam) = gv_pixel2unitvector(camParaCalib(icam), cam2d);
+    u(:,icam)
+    uM = eye(3) - u(:,icam) * (u(:,icam))';
+    pM(:,icam) = uM * camParaCalib(icam).Tinv;
+    M = M + uM;
+end
+% point of axes crossing
+p = M \ sum(pM,2);  % sums pm x together for all three cameras.  Makes a column vector
+h = zeros(1, ncams);
+for icam = 1:ncams
+    temp = p - ((p') * u(:,icam)) * u(:,icam) - pM(:,icam);
+    h(icam) = sqrt(temp' *temp);
+end
+hbar = sqrt(mean(h.*h));
+%p
+%h
+%hbar
+% dT = cross([0 0 1], (camParaCalib(1).Tinv));
+% dT = dT/norm(dT);
+% vec=dT+(camParaCalib(1).Tinv)';
+% outinitial=camParaCalib(1).R * camParaCalib(1).Tinv
+% outdT = camParaCalib(1).R * vec'
+r1 = camParaCalib.R(3)(1,:);
+r2 = camParaCalib.R(3)(1,:);
+r3 = camParaCalib.R(3)(1,:);
+T = [[[r1 r2 r3]' [Tx; Ty; Tz]]; [0 0 0 1]];
+Tinv = T^(-1);
+camParaCalib.R = [r1 r2 r3]';
+camParaCalib.T = [Tx Ty Tz]';
+camParaCalib.Rinv = Tinv(1:3, 1:3);
+camParaCalib.Tinv = Tinv(1:3, 4);
+

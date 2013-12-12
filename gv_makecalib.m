@@ -1,0 +1,56 @@
+function camcalib=gv_makecalib(mu, phi, theta, dTx, dTy, dTz)
+%This (not particularly elegant) code creates a camera calibration structure for a designated camera
+%location.  Right now the distance is hardcoded.  The angles give the camera pointing direction by
+%three successive rotations-mu rotates the axes about z so that the camera is in the x-z
+%plane.  phi rotates about y so the camera points along the negative z axis.  theta is the final rotation
+%about the z axis to make x horizontal and y vertical.  Then the reflection makes
+%negative z into positive z.  
+% dTx, dTy, and dTz, are distances that the camera position (Tinv) is 
+% away from the ideal setup where the camera is at a distance dist along the
+% camera pointing axis.
+% 
+
+dist=750;
+f_eff=420;
+
+rotztheta=[cos(theta), -sin(theta), 0; +sin(theta), cos(theta), 0; 0 0 1];
+rotzmu=[cos(mu), -sin(mu), 0; +sin(mu), cos(mu), 0; 0 0 1];
+rotyphi=[cos(phi), 0, sin(phi); 0 1 0; -sin(phi), 0, cos(phi)];
+reflect = [1 0 0;0 1 0;0 0 -1]; %the calibration model has determinant(camcalib.R)=-1, so we need a reflection
+
+rot=reflect*rotztheta * rotyphi * rotzmu;
+
+%start with T assuming origin is at center of camera view
+T = [ 0 0 dist]';
+Tinv = inv(rot) * (-1* T);
+
+%Now adjust camera position by dTx, dTy, dTz
+Tinv = Tinv+[dTx, dTy, dTz]';
+T = -1* rot * Tinv;
+
+camcalib.Npixh = 256;
+camcalib.Npixw = 256;
+camcalib.hpix = 0.022;	% pixel size (mm)
+camcalib.wpix = 0.022;	% pixel size (mm)
+
+% in Tsai's method, the offset of camera axis to CMOS sensor is assumed to be 0.
+camcalib.Noffh = 0;
+camcalib.Noffw = 0;
+
+% find the inverse matrix for transferring back from camera coords to world coords
+
+camcalib.R = rot;
+camcalib.T = T;
+camcalib.Rinv = inv(rot);
+camcalib.Tinv = Tinv;
+camcalib.f_eff = f_eff;
+camcalib.k1 = 0;
+camcalib.k1star = 0;
+% In Tsai's model, tangential distortion is ignored. Here p1 and p2 are
+% kept for compatability with other models.
+camcalib.p1 = 0;
+camcalib.p1star = 0;
+camcalib.p2 = 0;
+camcalib.p2star = 0;
+
+
